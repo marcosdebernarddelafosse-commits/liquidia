@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiquidIA — Liquidación Fiscal Automatizada</title>
+<style>
+  :root {
+    --azul: #1f3864; --azul-claro: #2e5494; --gris: #f4f5f7;
+    --borde: #d9dde3; --texto: #1a1d23; --tenue: #6b7280;
+    --rojo: #b42318; --verde: #027a48; --rojo-bg: #fef3f2; --verde-bg: #ecfdf3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         color: var(--texto); background: var(--gris); line-height: 1.5; }
+  header { background: var(--azul); color: #fff; padding: 20px 32px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header p { font-size: 13px; opacity: .8; margin-top: 2px; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 24px 80px; }
+  .card { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+          padding: 24px; margin-bottom: 22px; }
+  .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px;
+             color: var(--azul); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  label { display: block; font-size: 13px; color: var(--tenue); margin-bottom: 6px; }
+  input[type=text], input[type=file] { width: 100%; padding: 9px 11px;
+    border: 1px solid var(--borde); border-radius: 7px; font-size: 14px;
+    background: #fff; margin-bottom: 16px; }
+  .opcional { font-size: 12px; color: var(--tenue); font-weight: 400; }
+  button { background: var(--azul); color: #fff; border: none; border-radius: 7px;
+    padding: 11px 22px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  button:hover { background: var(--azul-claro); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .saldo { display: flex; align-items: baseline; gap: 14px; padding: 18px 20px;
+    border-radius: 9px; margin-bottom: 18px; }
+  .saldo.pagar { background: var(--rojo-bg); }
+  .saldo.favor { background: var(--verde-bg); }
+  .saldo .etiqueta { font-size: 13px; color: var(--tenue); }
+  .saldo .monto { font-size: 28px; font-weight: 700; }
+  .saldo.pagar .monto { color: var(--rojo); }
+  .saldo.favor .monto { color: var(--verde); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--borde); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--tenue); font-weight: 500; font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .dos-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; }
+  .b-solo_estudio { background: #fef3f2; color: var(--rojo); }
+  .b-solo_afip { background: #fffaeb; color: #b54708; }
+  .b-diferencia_monto { background: #eff8ff; color: #175cd3; }
+  .hidden { display: none; }
+  .muted { color: var(--tenue); font-size: 13px; }
+  .error { background: var(--rojo-bg); color: var(--rojo); padding: 12px 16px;
+    border-radius: 8px; font-size: 13px; margin-top: 14px; }
+  .descarga { display: inline-block; margin-top: 8px; }
+  .resumen-linea { display: flex; justify-content: space-between; padding: 7px 0;
+    border-bottom: 1px solid var(--borde); font-size: 14px; }
+  .resumen-linea.total { font-weight: 600; border-bottom: none; }
+  .spinner { font-size: 13px; color: var(--tenue); }
+</style>
+</head>
+<body>
+<header>
+  <h1>LiquidIA</h1>
+  <p>Liquidación de IVA automatizada · subí tu Libro IVA y obtené la DDJJ</p>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Nuevo período</h2>
+    <form id="form">
+      <div class="grid">
+        <div>
+          <label>Período (AAAA-MM)</label>
+          <input type="text" name="periodo" value="2026-03" required>
+        </div>
+        <div>
+          <label>CUIT</label>
+          <input type="text" name="cuit" value="30-71234567-8" required>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>Libro IVA Ventas (Excel/CSV)</label>
+          <input type="file" name="ventas" accept=".xlsx,.xls,.csv" required>
+        </div>
+        <div>
+          <label>Libro IVA Compras (Excel/CSV)</label>
+          <input type="file" name="compras" accept=".xlsx,.xls,.csv" required>
+        </div>
+      </div>
+      <div>
+        <label>Comprobantes AFIP — Ventas <span class="opcional">(opcional, para conciliar)</span></label>
+        <input type="file" name="afip_ventas" accept=".xlsx,.xls,.csv">
+      </div>
+      <button type="submit" id="btn">Procesar liquidación</button>
+      <span id="cargando" class="spinner hidden">Procesando...</span>
+      <div id="error" class="error hidden"></div>
+    </form>
+  </div>
+
+  <div id="resultado" class="hidden">
+    <div class="card">
+      <h2>Resultado de la liquidación</h2>
+      <div id="saldo"></div>
+      <div class="dos-cols">
+        <div>
+          <h2>Débito fiscal — Ventas</h2>
+          <table id="tabla-ventas"></table>
+        </div>
+        <div>
+          <h2>Crédito fiscal — Compras</h2>
+          <table id="tabla-compras"></table>
+        </div>
+      </div>
+      <div id="determinacion"></div>
+      <a id="descarga" class="descarga"><button type="button">Descargar papel de trabajo (Excel)</button></a>
+      <div id="advertencias"></div>
+    </div>
+
+    <div id="card-excepciones" class="card hidden">
+      <h2>Excepciones de conciliación (estudio vs AFIP)</h2>
+      <p id="tasa" class="muted"></p>
+      <table id="tabla-excepciones"></table>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n == null ? "—" : n.toLocaleString("es-AR",
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("error").classList.add("hidden");
+  $("cargando").classList.remove("hidden");
+  $("btn").disabled = true;
+
+  try {
+    const data = new FormData(e.target);
+    if (data.get("afip_ventas") && data.get("afip_ventas").size === 0)
+      data.delete("afip_ventas");
+
+    const r = await fetch("/api/liquidaciones", { method: "POST", body: data });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(typeof err.detail === "string" ? err.detail
+        : JSON.stringify(err.detail));
+    }
+    render(await r.json());
+  } catch (err) {
+    $("error").textContent = "No se pudo procesar: " + err.message;
+    $("error").classList.remove("hidden");
+  } finally {
+    $("cargando").classList.add("hidden");
+    $("btn").disabled = false;
+  }
+});
+
+function tablaAlicuotas(rows) {
+  let h = "<tr><th>Alícuota</th><th>Neto gravado</th><th>IVA</th></tr>";
+  for (const r of rows)
+    h += `<tr><td>${r.alicuota}%</td><td class="num">${fmt(r.neto)}</td>`
+       + `<td class="num">${fmt(r.iva)}</td></tr>`;
+  return h;
+}
+
+function render(resp) {
+  const liq = resp.liquidacion;
+  $("resultado").classList.remove("hidden");
+
+  const aPagar = liq.saldo_a_pagar > 0;
+  $("saldo").innerHTML =
+    `<div class="saldo ${aPagar ? "pagar" : "favor"}">
+       <span class="etiqueta">${aPagar ? "Saldo a pagar" : "Saldo a favor"}</span>
+       <span class="monto">$ ${fmt(aPagar ? liq.saldo_a_pagar : liq.saldo_a_favor)}</span>
+     </div>`;
+
+  $("tabla-ventas").innerHTML = tablaAlicuotas(liq.ventas_por_alicuota);
+  $("tabla-compras").innerHTML = tablaAlicuotas(liq.compras_por_alicuota);
+
+  $("determinacion").innerHTML =
+    linea("Débito fiscal", liq.debito_fiscal)
+    + linea("(-) Crédito fiscal", liq.credito_fiscal)
+    + linea("= Saldo técnico", liq.saldo_tecnico)
+    + linea("(-) Percepciones IVA", liq.percepciones_iva)
+    + linea(aPagar ? "Saldo a pagar" : "Saldo a favor",
+            aPagar ? liq.saldo_a_pagar : liq.saldo_a_favor, true);
+
+  $("descarga").href = `/api/liquidaciones/${resp.id}/papel`;
+
+  $("advertencias").innerHTML = liq.advertencias.length
+    ? `<div class="error" style="background:#fffaeb;color:#b54708;margin-top:16px">`
+      + liq.advertencias.map(a => "• " + a).join("<br>") + "</div>"
+    : "";
+
+  if (resp.conciliacion) renderExcepciones(resp.conciliacion);
+  else $("card-excepciones").classList.add("hidden");
+}
+
+function linea(lbl, val, total) {
+  return `<div class="resumen-linea ${total ? "total" : ""}">`
+    + `<span>${lbl}</span><span class="num">$ ${fmt(val)}</span></div>`;
+}
+
+function renderExcepciones(c) {
+  $("card-excepciones").classList.remove("hidden");
+  $("tasa").textContent =
+    `Tasa de conciliación: ${(c.tasa_conciliacion * 100).toFixed(0)}% `
+    + `(${c.conciliados} de ${c.total} comprobantes OK) · `
+    + `${c.excepciones.length} excepciones a revisar`;
+
+  let h = "<tr><th>Comprobante</th><th>Estado</th><th>Detalle</th></tr>";
+  for (const e of c.excepciones) {
+    h += `<tr><td>${e.razon_social}<br><span class="muted">${e.clave}</span></td>`
+       + `<td><span class="badge b-${e.estado}">${e.estado.replace("_", " ")}</span></td>`
+       + `<td style="text-align:left">${e.detalle.join("<br>")}</td></tr>`;
+  }
+  $("tabla-excepciones").innerHTML = h;
+}
+</script>
+</body>
+</html>
